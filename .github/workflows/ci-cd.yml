@@ -1,0 +1,116 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - work
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Compile
+        run: cargo build --locked --verbose
+
+      - name: Unit tests
+        run: cargo test --locked --verbose
+
+      - name: Package release binary
+        run: cargo build --locked --release --verbose
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tounges-release-linux
+          path: target/release/tounges
+
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        scanner:
+          - codeql
+          - clippy
+          - cargo-audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        if: matrix.scanner != 'codeql'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        if: matrix.scanner != 'codeql'
+        uses: swatinem/rust-cache@v2
+
+      - name: Initialize CodeQL
+        if: matrix.scanner == 'codeql'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+
+      - name: Autobuild for CodeQL
+        if: matrix.scanner == 'codeql'
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Run CodeQL analysis
+        if: matrix.scanner == 'codeql'
+        uses: github/codeql-action/analyze@v3
+
+      - name: Run Clippy
+        if: matrix.scanner == 'clippy'
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run RustSec advisory scan
+        if: matrix.scanner == 'cargo-audit'
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  dast:
+    name: DAST (runtime abuse tests)
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --locked --release --verbose
+
+      - name: Dynamic security tests
+        run: bash scripts/dast_smoke.sh
