@@ -71,3 +71,4 @@ GitHub Actions workflow is defined at `.github/workflows/ci-cd.yml` and includes
 - **Build stage**: format check, compile, tests, and release artifact upload.
 - **SAST stage**: CodeQL, `clippy -D warnings`, and RustSec advisory scan.
 - **DAST stage**: runtime abuse tests (`scripts/dast_smoke.sh`) that validate safe failure behavior for malformed/hostile inputs and expected behavior for valid inputs.
+
