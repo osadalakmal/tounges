@@ -631,7 +631,7 @@ impl Parser {
         if self.peek().kind != kind {
             return false;
         }
-        value.map_or(true, |v| self.peek().value == v)
+        value.is_none_or(|v| self.peek().value == v)
     }
 
     fn check_next_symbol(&self, symbol: &str) -> bool {
